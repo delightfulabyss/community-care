@@ -40,7 +40,7 @@ contract RoundManager {
     }
     
     // The current round's state.
-    RoundPhase external roundPhase;
+    RoundPhase storage roundPhase;
 
     // Start the round with the request period
     function startRequestPeriod() external onlyOwner {
