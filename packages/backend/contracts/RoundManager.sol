@@ -9,22 +9,22 @@ contract RoundManager {
     uint256 public currentRoundStartTime;
 
     // The request period duration.
-    uint256 public requestPeriodDuration;
+    uint256 public requestPhaseDuration;
 
     // The funding period duration.
-    uint256 public fundingPeriodDuration;
+    uint256 public fundingPhaseDuration;
 
     // The settlement period duration.
-    uint256 public settlementPeriodDuration;
+    uint256 public settlementPhaseDuration;
 
     event AidRoundStarted(uint indexed currentRound, uint indexed startTime);
     event AidRoundEnded(uint indexed currentRound, uint indexed endTime);
-    event RequestPeriodStarted(uint indexed currentRound, uint indexed startTime);
-    event RequestPeriodEnded(uint indexed currentRound, uint indexed endTime);
-    event FundingPeriodStarted(uint indexed currentRound, uint indexed startTime);
-    event FundingPeriodEnded(uint indexed currentRound, uint indexed endTime);
-    event SettlementPeriodStarted(uint indexed currentRound, uint indexed startTime);
-    event SettlementPeriodEnded(uint indexed currentRound, uint indexed endTime);
+    event RequestPhaseStarted(uint indexed currentRound, uint indexed startTime);
+    event RequestPhaseEnded(uint indexed currentRound, uint indexed endTime);
+    event FundingPhaseStarted(uint indexed currentRound, uint indexed startTime);
+    event FundingPhaseEnded(uint indexed currentRound, uint indexed endTime);
+    event SettlementPhaseStarted(uint indexed currentRound, uint indexed startTime);
+    event SettlementPhaseEnded(uint indexed currentRound, uint indexed endTime);
 
      
     // The current round's state.
@@ -32,44 +32,44 @@ contract RoundManager {
         // The round is not started.
         NotStarted,
         // The round is in the request period.
-        RequestPeriod,
+        RequestPhase,
         // The round is in the funding period.
-        FundingPeriod,
+        FundingPhase,
         // The round is in the settlement period.
-        SettlementPeriod,
+        SettlementPhase,
     }
     
     // The current round's state.
     RoundPhase storage roundPhase;
 
     // Start the round with the request period
-    function startRequestPeriod() external onlyOwner {
+    function startRequestPhase() external onlyOwner {
         require(roundPhase == RoundPhase.NotStarted, "The round has already started.");
-        roundPhase = RoundPhase.RequestPeriod;
-        emit RequestPeriodStarted(currentRound, block.timestamp);
+        roundPhase = RoundPhase.RequestPhase;
+        emit RequestPhaseStarted(currentRound, block.timestamp);
     }
 
     // Start the funding period
-    function startFundingPeriod() external onlyOwner {
-        require(roundPhase == RoundPhase.RequestPeriod, "The funding period has closed for this round");
-        roundPhase = RoundPhase.FundingPeriod;
-        emit RequestPeriodEnded(currentRound, block.timestamp);
-        emit FundingPeriodStarted(currentRound, block.timestamp);
+    function startFundingPhase() external onlyOwner {
+        require(roundPhase == RoundPhase.RequestPhase, "The funding period has closed for this round");
+        roundPhase = RoundPhase.FundingPhase;
+        emit RequestPhaseEnded(currentRound, block.timestamp);
+        emit FundingPhaseStarted(currentRound, block.timestamp);
     }
 
     // Start the settlement period
-    function startSettlementPeriod() external onlyOwner {
-        require(roundPhase == RoundPhase.FundingPeriod, "The settlement period has closed for this round");
-        roundPhase = RoundPhase.SettlementPeriod;
-        emit FundingPeriodEnded(currentRound, block.timestamp);
-        emit SettlementPeriodStarted(currentRound, block.timestamp);
+    function startSettlementPhase() external onlyOwner {
+        require(roundPhase == RoundPhase.FundingPhase, "The settlement period has closed for this round");
+        roundPhase = RoundPhase.SettlementPhase;
+        emit FundingPhaseEnded(currentRound, block.timestamp);
+        emit SettlementPhaseStarted(currentRound, block.timestamp);
     }
 
     // Finish the round
     function finishRound() external onlyOwner {
-        require(roundPhase == RoundPhase.SettlementPeriod, "The round has already finished");
+        require(roundPhase == RoundPhase.SettlementPhase, "The round has already finished");
         roundPhase = RoundPhase.NotStarted;
-        emit SettlementPeriodEnded(currentRound, block.timestamp);
+        emit SettlementPhaseEnded(currentRound, block.timestamp);
         emit AidRoundEnded(currentRound, block.timestamp);
     }
 
@@ -78,9 +78,9 @@ contract RoundManager {
         require(roundPhase == RoundPhase.Finished, "The previous round has not finished yet");
         currentRound++;
         currentRoundStartTime = block.timestamp;
-        roundPhase = RoundPhase.RequestPeriod;
+        roundPhase = RoundPhase.RequestPhase;
         emit AidRoundStarted(currentRound, currentRoundStartTime);
-        emit RequestPeriodStarted(currentRound, currentRoundStartTime);
+        emit RequestPhaseStarted(currentRound, currentRoundStartTime);
     }
 
     //Get current round state
@@ -96,28 +96,28 @@ contract RoundManager {
                     0,
                     block.timestamp
                 );
-            case RoundPhase.RequestPeriod:
+            case RoundPhase.RequestPhase:
                 return (
                     currentRound,
                     roundPhase,
                     currentRoundStartTime,
-                    currentRoundStartTime + requestPeriodDuration,
+                    currentRoundStartTime + requestPhaseDuration,
                     block.timestamp
                 );
-            case RoundPhase.FundingPeriod:
+            case RoundPhase.FundingPhase:
                 return (
                     currentRound,
                     roundPhase,
-                    currentRoundStartTime + requestPeriodDuration,
-                    currentRoundStartTime + requestPeriodDuration + fundingPeriodDuration,
+                    currentRoundStartTime + requestPhaseDuration,
+                    currentRoundStartTime + requestPhaseDuration + fundingPhaseDuration,
                     block.timestamp
                 );
-            case RoundPhase.SettlementPeriod:
+            case RoundPhase.SettlementPhase:
                 return (
                     currentRound,
                     roundPhase,
-                    currentRoundStartTime + requestPeriodDuration + fundingPeriodDuration,
-                    currentRoundStartTime + requestPeriodDuration + fundingPeriodDuration + settlementPeriodDuration,
+                    currentRoundStartTime + requestPhaseDuration + fundingPhaseDuration,
+                    currentRoundStartTime + requestPhaseDuration + fundingPhaseDuration + settlementPhaseDuration,
                     block.timestamp
                 );
 
