@@ -1,6 +1,6 @@
 {
-  "name": "@create-web3/frontend",
-  "version": "0.1.0",
+  "name": "@mutual-protocol/frontend",
+  "version": "0.0.1",
   "description": "",
   "private": true,
   "scripts": {

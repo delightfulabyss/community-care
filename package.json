@@ -1,18 +1,18 @@
 {
   "name": "mutual-protocol",
   "version": "0.0.1",
-  "description": "create-web3 monorepo quickstart with next and hardhat",
+  "description": "A mutual aid protocol on the Ethereum blockchain",
   "main": "index.js",
   "private": true,
   "scripts": {
-    "dev": "yarn workspace @create-web3/frontend dev",
-    "build": "yarn workspace @create-web3/frontend build",
-    "start": "yarn workspace @create-web3/frontend start",
-    "lint": "yarn workspace @create-web3/frontend lint",
-    "chain": "yarn workspace @create-web3/backend chain",
-    "compile": "yarn workspace @create-web3/backend compile",
-    "clean": "yarn workspace @create-web3/backend clean",
-    "deploy": "yarn workspace @create-web3/backend deploy"
+    "dev": "yarn workspace @mutual-protocol/frontend dev",
+    "build": "yarn workspace @mutual-protocol/frontend build",
+    "start": "yarn workspace @mutual-protocol/frontend start",
+    "lint": "yarn workspace @mutual-protocol/frontend lint",
+    "chain": "yarn workspace @mutual-protocol/backend chain",
+    "compile": "yarn workspace @mutual-protocol/backend compile",
+    "clean": "yarn workspace @mutual-protocol/backend clean",
+    "deploy": "yarn workspace @mutual-protocol/backend deploy"
   },
   "workspaces": {
     "packages": [
