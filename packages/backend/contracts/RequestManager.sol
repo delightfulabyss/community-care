@@ -92,7 +92,7 @@ contract RequestManager {
 
     function _nextPhase() internal {
         Round memory currentRound = rounds[rounds.length - 1];
-        currentRound.currentPhase = Phases(uint(currentRound.currentPhase + 1));
+        currentRound.currentPhase = Phases(uint(currentRound.currentPhase) + 1);
     }
 
 
@@ -134,7 +134,7 @@ contract RequestManager {
         rounds[currentRoundNumber].totalRequests++;
         rounds[currentRoundNumber].totalFundsRequested += requestAmountInWei;
         requestToDonationRatios[msg.sender].numberRequests++;
-        EnumerableSet.AddressSet.contains(requestors, msg.sender) ? 0 : donators.add(msg.sender);
+        EnumerableSet.contains(requestors, msg.sender) ? 0 : donators.add(msg.sender);
     }
 
     // Donate to funding pool
