@@ -1,127 +1,230 @@
 pragma solidity ^0.8.14;
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+
 contract RequestManager {
-    
-    
-    // The current round.
-    uint256 public currentRound;
 
-    // The current round's start time.
-    uint256 public currentRoundStartTime;
-
+    using EnumerableSet for EnumerableSet.AddressSet;
+    
     // The request period duration.
-    uint256 public requestPhaseDuration;
+    uint256 public requestPhaseDuration = 7 days;
 
     // The funding period duration.
-    uint256 public fundingPhaseDuration;
+    uint256 public fundingPhaseDuration = 7 days;
+
+    //The allocation period duration.
+    uint256 public allocationPhaseDuration = 24 hours;
 
     // The settlement period duration.
-    uint256 public settlementPhaseDuration;
+    uint256 public settlementPhaseDuration = 7 days;
+
+    enum Phases {
+        Request,
+        Funding,
+        Allocation,
+        Settlement,
+        Finished
+    }
+
+    struct Round {
+        uint startTime;
+        uint totalRequests;
+        Phases currentPhase;
+        uint totalFundsRequested;
+        uint totalDonations;
+        uint totalFundsInWei;
+        uint totalSettlementsInWei;
+
+    }
+
+    struct Request {
+        address requester;
+        uint requestTime;
+        string title;
+        string description;
+        uint requestAmountInWei;
+        string supportingDocumentation;
+        uint amountFundedInWei;
+        bool hasBeenSettled;
+    }
+    struct Donation {
+        uint donationId;
+        uint donationTime;
+        uint donationAmountInWei;
+    }
+    struct RTDRatio {
+        uint numberRequests;
+        uint numberDonations;
+    }
+
+    mapping (address => mapping (uint => Request[])) requests;
+    EnumerableSet.AddressSet private requestors;
+    mapping (address => mapping (uint => Donation[])) donations;
+    EnumerableSet.AddressSet private donators;
+    mapping (address => RTDRatio) public requestToDonationRatios;
+    Round[] public rounds;
+    
 
     event AidRoundStarted(uint indexed currentRound, uint indexed startTime);
     event AidRoundEnded(uint indexed currentRound, uint indexed endTime);
-    event RequestPhaseStarted(uint indexed currentRound, uint indexed startTime);
-    event RequestPhaseEnded(uint indexed currentRound, uint indexed endTime);
-    event FundingPhaseStarted(uint indexed currentRound, uint indexed startTime);
-    event FundingPhaseEnded(uint indexed currentRound, uint indexed endTime);
-    event SettlementPhaseStarted(uint indexed currentRound, uint indexed startTime);
-    event SettlementPhaseEnded(uint indexed currentRound, uint indexed endTime);
+    event RequestSubmitted(address indexed requester, uint indexed requestAmountInWei);
+    event RequestFunded(address indexed requester, uint indexed requestAmountInWei, address funder, uint indexed fundingAmountInWei);
+    event RequestsSettled(address indexed requester, uint indexed currentRoundNumberNumber);
 
-     
-    // The current round's state.
-    enum RoundPhase {
-        // The round is not started.
-        NotStarted,
-        // The round is in the request period.
-        RequestPhase,
-        // The round is in the funding period.
-        FundingPhase,
-        // The round is in the settlement period.
-        SettlementPhase,
-    }
-    
-    // The current round's state.
-    RoundPhase storage roundPhase;
-
-    // Start the round with the request period
-    function startRequestPhase() external onlyOwner {
-        require(roundPhase == RoundPhase.NotStarted, "The round has already started.");
-        roundPhase = RoundPhase.RequestPhase;
-        emit RequestPhaseStarted(currentRound, block.timestamp);
+    //State machine modifiers
+    modifier onlyPhase(Phases phase) {
+        require(phase == rounds[rounds.length - 1].currentPhase, "Operation not allowed at this phase");
+        _;
     }
 
-    // Start the funding period
-    function startFundingPhase() external onlyOwner {
-        require(roundPhase == RoundPhase.RequestPhase, "The funding period has closed for this round");
-        roundPhase = RoundPhase.FundingPhase;
-        emit RequestPhaseEnded(currentRound, block.timestamp);
-        emit FundingPhaseStarted(currentRound, block.timestamp);
-    }
-
-    // Start the settlement period
-    function startSettlementPhase() external onlyOwner {
-        require(roundPhase == RoundPhase.FundingPhase, "The settlement period has closed for this round");
-        roundPhase = RoundPhase.SettlementPhase;
-        emit FundingPhaseEnded(currentRound, block.timestamp);
-        emit SettlementPhaseStarted(currentRound, block.timestamp);
-    }
-
-    // Finish the round
-    function finishRound() external onlyOwner {
-        require(roundPhase == RoundPhase.SettlementPhase, "The round has already finished");
-        roundPhase = RoundPhase.NotStarted;
-        emit SettlementPhaseEnded(currentRound, block.timestamp);
-        emit AidRoundEnded(currentRound, block.timestamp);
-    }
-
-    // Start the next round
-    function startNextRound() external onlyOwner {
-        require(roundPhase == RoundPhase.Finished, "The previous round has not finished yet");
-        currentRound++;
-        currentRoundStartTime = block.timestamp;
-        roundPhase = RoundPhase.RequestPhase;
-        emit AidRoundStarted(currentRound, currentRoundStartTime);
-        emit RequestPhaseStarted(currentRound, currentRoundStartTime);
-    }
-
-    //Get current round state
-    function getCurrentRoundInfo() external view returns (uint256, RoundPhase, uint256, uint256, uint256) {
-        //Return current round number,current round state, current period start time, current period end time, current time
-        switch (roundPhase) {
-            case RoundPhase.NotStarted:
-                return (
-                    currentRound,
-                    roundPhase,
-                    0, 
-                    0,
-                    0,
-                    block.timestamp
-                );
-            case RoundPhase.RequestPhase:
-                return (
-                    currentRound,
-                    roundPhase,
-                    currentRoundStartTime,
-                    currentRoundStartTime + requestPhaseDuration,
-                    block.timestamp
-                );
-            case RoundPhase.FundingPhase:
-                return (
-                    currentRound,
-                    roundPhase,
-                    currentRoundStartTime + requestPhaseDuration,
-                    currentRoundStartTime + requestPhaseDuration + fundingPhaseDuration,
-                    block.timestamp
-                );
-            case RoundPhase.SettlementPhase:
-                return (
-                    currentRound,
-                    roundPhase,
-                    currentRoundStartTime + requestPhaseDuration + fundingPhaseDuration,
-                    currentRoundStartTime + requestPhaseDuration + fundingPhaseDuration + settlementPhaseDuration,
-                    block.timestamp
-                );
-
+    modifier checkTime(){
+        Round memory currentRound = rounds[rounds.length - 1];
+        if(currentRound.currentPhase == Phases.Request && block.timestamp >= currentRound.startTime + requestPhaseDuration) {
+            _nextPhase();
+        }else if (currentRound.currentPhase == Phases.Funding && block.timestamp >= currentRound.startTime + requestPhaseDuration + fundingPhaseDuration) {
+            _nextPhase();
+        }else if (currentRound.currentPhase == Phases.Allocation && block.timestamp >= currentRound.startTime + requestPhaseDuration + fundingPhaseDuration + allocationPhaseDuration) {
+            _nextPhase();
+        }else if (currentRound.currentPhase == Phases.Settlement && block.timestamp >= currentRound.startTime + requestPhaseDuration + fundingPhaseDuration + allocationPhaseDuration + settlementPhaseDuration) {
+            _nextPhase();
         }
+        _;
     }
 
+    function _nextPhase() internal {
+        Round memory currentRound = rounds[rounds.length - 1];
+        currentRound.currentPhase = Phases(uint(currentRound.currentPhase + 1));
+    }
+
+
+    // Start new round
+    function startNewRound() public {
+        uint startTime = block.timestamp;
+        uint totalRequests = 0;
+        uint totalFundsInWei = 0;
+        uint totalSettlementsInWei = 0;
+
+        Round memory newRound = Round(
+            block.timestamp,
+            0,
+            Phases.Request,
+            0,
+            0,
+            0,
+            0
+        );
+        rounds.push(newRound);
+    }
+
+    // Submit an aid request
+    function submitAidRequest(string memory title, string memory description, uint requestAmountInWei, string memory supportingDocumentation) public checkTime onlyPhase(Phases.Request){
+        require(requestAmountInWei > 0, "Request amount must be greater than zero");
+        uint currentRoundNumber = rounds.length - 1;
+
+        Request memory newRequest = Request(
+            msg.sender,
+            block.timestamp,
+            title,
+            description,
+            requestAmountInWei,
+            supportingDocumentation,
+            0,
+            false
+        );
+        requests[msg.sender][currentRoundNumber].push(newRequest);
+        rounds[currentRoundNumber].totalRequests++;
+        rounds[currentRoundNumber].totalFundsRequested += requestAmountInWei;
+        requestToDonationRatios[msg.sender].numberRequests++;
+        EnumerableSet.AddressSet.contains(requestors, msg.sender) ? 0 : donators.add(msg.sender);
+    }
+
+    // Donate to funding pool
+    function donateToFundingPool() public payable checkTime onlyPhase(Phases.Funding) {
+        require(msg.value > 0, "Donation amount must be greater than zero");
+
+        uint currentRoundNumber = rounds.length - 1;
+        uint donationId = donations[msg.sender][currentRoundNumber].length + 1;
+        uint donationTime = block.timestamp;
+
+        Donation memory newDonation = Donation(
+            donationId,
+            donationTime,
+            msg.value
+        );
+        donations[msg.sender][currentRoundNumber].push(newDonation);
+        rounds[currentRoundNumber].totalDonations++;
+        rounds[currentRoundNumber].totalFundsInWei += msg.value;
+        requestToDonationRatios[msg.sender].numberDonations++;
+        EnumerableSet.AddressSet.contains(donators, msg.sender) ? 0 : donators.add(msg.sender);
+
+        //Calculate rewards and save in rewards manager
+    }
+
+    function allocateFundingPool() public checkTime onlyPhase(Phases.Allocation) {
+
+        address[] memory requestorsArray = EnumerableSet.AddressSet.values(requestors);
+        uint currentRoundNumber = rounds.length - 1;
+        for (uint i = 0; i < requestorsArray; i++) {
+            Request[] memory requestsArray = requests[requestorsArray[i]][rounds.length - 1];
+            for (uint j = 0; j < requestsArray; j++ ){
+
+                    //Simple algorithm for funding for now
+                    if (rounds[currentRoundNumber].totalFundsDonated >= rounds[currentRoundNumber].totalFundsRequested) {
+                        requestsArray[j].amountFundedInWei = requestsArray[j].requestAmountInWei;
+                    } else {
+                        requestsArray[j].amountFundedInWei = rounds[currentRoundNumber].totalFundsDonated / rounds[currentRoundNumber].totalRequests;
+                    }
+                }
+            }
+        }
+
+    function settleAidRequests() public view checkTime onlyPhase(Phases.Settlement){
+        uint currentRoundNumber = rounds.length - 1;
+        for (uint i = 0; i < requests[msg.sender][currentRoundNumber]; i++) {
+            if (requests[msg.sender][currentRoundNumber][i].amountFundedInWei >= 0) {
+                requests[msg.sender][currentRoundNumber][i].hasBeenSettled = true;
+                address(this).transfer(msg.sender, requests[msg.sender][currentRoundNumber][i].amountFundedInWei);
+            }
+        }
+
+        emit RequestsSettled(msg.sender, currentRoundNumber);
+    }
+
+
+    // Getter functions
+    function getCurrentRoundNumber() public view returns (uint) {
+        return rounds.length - 1;
+    }
+
+    function getCurrentRound() public view returns (Round memory) {
+        return rounds[rounds.length - 1];
+    }
+
+    function getCurrentRoundStartTime() public view returns (uint) {
+        Round memory currentRound = rounds[rounds.length - 1];
+        return rounds[rounds.length - 1].startTime;
+    }
+
+    function getCurrentRoundTotalRequests() public view returns (uint) {
+        return rounds[rounds.length - 1].totalRequests;
+    }
+
+    function getCurrentRoundTotalFundsInWei() public view returns (uint) {
+        return rounds[rounds.length - 1].totalFundsInWei;
+    }
+
+    function getCurrentRoundTotalSettlementsInWei() public view returns (uint) {
+        return rounds[rounds.length - 1].totalSettlementsInWei;
+    }
+
+    function getRequest(address requester, uint requestId) public view returns (Request memory) {
+        return requests[requester][rounds.length - 1][requestId];
+    }
+
+    function getDonation(address requester, uint requestId, uint donationId) public view returns (Donation memory) {
+        return donations[requester][rounds.length - 1][donationId];
+    }
+
+    function getRequestToDonationRatio(address requester) public view returns (uint) {
+        return requestToDonationRatios[requester].numberRequests / requestToDonationRatios[requester].numberDonations;
+    }
 }
