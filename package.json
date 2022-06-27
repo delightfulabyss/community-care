@@ -1,18 +1,18 @@
 {
-  "name": "mutual-protocol",
+  "name": "community-care",
   "version": "0.0.1",
   "description": "A mutual aid protocol on the Ethereum blockchain",
   "main": "index.js",
   "private": true,
   "scripts": {
-    "dev": "yarn workspace @mutual-protocol/frontend dev",
-    "build": "yarn workspace @mutual-protocol/frontend build",
-    "start": "yarn workspace @mutual-protocol/frontend start",
-    "lint": "yarn workspace @mutual-protocol/frontend lint",
-    "chain": "yarn workspace @mutual-protocol/backend chain",
-    "compile": "yarn workspace @mutual-protocol/backend compile",
-    "clean": "yarn workspace @mutual-protocol/backend clean",
-    "deploy": "yarn workspace @mutual-protocol/backend deploy"
+    "dev": "yarn workspace @community-care/frontend dev",
+    "build": "yarn workspace @community-care/frontend build",
+    "start": "yarn workspace @community-care/frontend start",
+    "lint": "yarn workspace @community-care/frontend lint",
+    "chain": "yarn workspace @community-care/backend chain",
+    "compile": "yarn workspace @community-care/backend compile",
+    "clean": "yarn workspace @community-care/backend clean",
+    "deploy": "yarn workspace @community-care/backend deploy"
   },
   "workspaces": {
     "packages": [

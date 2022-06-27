@@ -2,7 +2,7 @@ pragma solidity ^0.8.14;
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./ERC20.sol";
 
-contract CollectiveCare {
+contract CommunityCare {
 
     using EnumerableSet for EnumerableSet.AddressSet;
     
