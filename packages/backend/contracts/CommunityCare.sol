@@ -19,7 +19,7 @@ contract CommunityCare {
     uint256 public settlementPhaseDuration;
 
     //Common funding pool
-    uint256 internal commonPoolBalance;
+    uint256 internal commonPoolBalanceInWei;
 
     enum Phases {
         Request,
@@ -52,9 +52,9 @@ contract CommunityCare {
     }
 
     struct Donation {
-        uint donationId;
         uint donationTime;
         uint donationAmountInWei;
+        bool donationToRequest
     }
     //Long integers to allow for ratios below 1
     struct RTDRatio {
@@ -200,6 +200,7 @@ contract CommunityCare {
         donations[msg.sender][currentRoundNumber].push(newDonation);
         rounds[currentRoundNumber].totalDonations++;
         rounds[currentRoundNumber].totalFundsInWei += msg.value;
+        commonPoolBalanceInWei += msg.value;
         requestToDonationRatios[msg.sender].numberDonations += 1e18;
         EnumerableSet.contains(donators, msg.sender) ? false : donators.add(msg.sender);
 
@@ -296,7 +297,7 @@ contract CommunityCare {
     }
 
     function getCommonPoolBalance () public view returns (uint) {
-        return commonPoolBalance;
+        return commonPoolBalanceInWei;
     }
 
     /***************************************************************************
