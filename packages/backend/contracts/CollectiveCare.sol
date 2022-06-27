@@ -187,7 +187,7 @@ contract CollectiveCare {
     function allocateFundingPool() public checkTime onlyPhase(Phases.Allocation) {
         address[] memory requestorsArray = EnumerableSet.values(requestors);
         uint currentRoundNumber = rounds.length - 1;
-        allocateFunding(requestorsArray, currentRoundNumber);
+        _allocateFunding(requestorsArray, currentRoundNumber);
         emit FundingAllocated(requestorsArray, currentRoundNumber);
         }
 
