@@ -1,21 +1,22 @@
 pragma solidity ^0.8.14;
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "./ERC20.sol";
 
-contract RequestManager {
+contract CollectiveCare {
 
     using EnumerableSet for EnumerableSet.AddressSet;
     
     // The request period duration.
-    uint256 public requestPhaseDuration = 7 days;
+    uint256 public requestPhaseDuration;
 
     // The funding period duration.
-    uint256 public fundingPhaseDuration = 7 days;
+    uint256 public fundingPhaseDuration;
 
     //The allocation period duration.
-    uint256 public allocationPhaseDuration = 24 hours;
+    uint256 public allocationPhaseDuration;
 
     // The settlement period duration.
-    uint256 public settlementPhaseDuration = 7 days;
+    uint256 public settlementPhaseDuration;
 
     enum Phases {
         Request,
@@ -61,12 +62,25 @@ contract RequestManager {
     mapping (address => mapping (uint => Donation[])) donations;
     EnumerableSet.AddressSet private donators;
     mapping (address => RTDRatio) public requestToDonationRatios;
+    mapping (address => uint) public rewardBalances;
     Round[] public rounds;
+    CareToken internal rewardsToken;
     
     event PhaseStarted(uint indexed roundNumber, Phases indexed phase);
     event RequestSubmitted(address indexed requester, uint indexed requestAmountInWei);
+    event DonationSubmitted(address indexed donator, uint indexed donationAmountInWei);
+    event TokenRewardsGenerated(address indexed requester, uint indexed rewardAmountInWei);
+    event TokenRewardsWithdrawn(address indexed requester, uint indexed rewardAmountInWei);
     event FundingAllocated(address[] indexed requesters, uint currentRoundNumber);
     event RequestSettled(address indexed requester, uint indexed requestAmountInWei);
+
+    constructor(uint _requestPhaseDuration, uint _fundingPhaseDuration, uint _allocationPhaseDuration, uint _settlementPhaseDuration, address _rewardsToken) public {
+        requestPhaseDuration = _requestPhaseDuration;
+        fundingPhaseDuration = _fundingPhaseDuration;
+        allocationPhaseDuration = _allocationPhaseDuration;
+        settlementPhaseDuration = _settlementPhaseDuration;
+        rewardsToken = CareToken(_rewardsToken);
+    }
 
     //State machine modifiers
     modifier onlyPhase(Phases phase) {
@@ -97,10 +111,6 @@ contract RequestManager {
 
     // Start new round
     function startNewRound() public {
-        uint startTime = block.timestamp;
-        uint totalRequests = 0;
-        uint totalFundsInWei = 0;
-        uint totalSettlementsInWei = 0;
 
         Round memory newRound = Round(
             block.timestamp,
@@ -132,8 +142,8 @@ contract RequestManager {
         requests[msg.sender][currentRoundNumber].push(newRequest);
         rounds[currentRoundNumber].totalRequests++;
         rounds[currentRoundNumber].totalFundsRequested += requestAmountInWei;
-        requestToDonationRatios[msg.sender].numberRequests++;
-        EnumerableSet.contains(requestors, msg.sender) ? 0 : donators.add(msg.sender);
+        requestToDonationRatios[msg.sender].numberRequests += 1e18;
+        EnumerableSet.contains(requestors, msg.sender) ? false : donators.add(msg.sender);
     }
 
     // Donate to funding pool
@@ -152,45 +162,69 @@ contract RequestManager {
         donations[msg.sender][currentRoundNumber].push(newDonation);
         rounds[currentRoundNumber].totalDonations++;
         rounds[currentRoundNumber].totalFundsInWei += msg.value;
-        requestToDonationRatios[msg.sender].numberDonations++;
-        EnumerableSet.AddressSet.contains(donators, msg.sender) ? 0 : donators.add(msg.sender);
+        requestToDonationRatios[msg.sender].numberDonations += 1e18;
+        EnumerableSet.contains(donators, msg.sender) ? false : donators.add(msg.sender);
 
-        //Calculate rewards and save in rewards manager
+        //Calculate rewards and add to reward balance
+        uint tokenRewards = _calculateTokenRewards(msg.sender, msg.value);
+        if (tokenRewards > 0) {
+            rewardBalances[msg.sender] += tokenRewards;
+            emit TokenRewardsGenerated(msg.sender, tokenRewards);
+        }
+        emit DonationSubmitted(msg.sender, msg.value);
+        
+    }
+
+    //Simple algorithm for token rewards for now but can be replaced in the future
+    function _calculateTokenRewards(address donator, uint donationAmount) internal view returns (uint tokenRewards) {
+        uint totalRewards;
+        RTDRatio memory rtdRatio = requestToDonationRatios[donator];
+        uint ratioUint = rtdRatio.numberRequests / rtdRatio.numberDonations;
+        ratioUint > 1e18 ? totalRewards = (donationAmount * ratioUint) / 1000 : totalRewards = 0;
+        return totalRewards;
     }
 
     function allocateFundingPool() public checkTime onlyPhase(Phases.Allocation) {
-        address[] memory requestorsArray = EnumerableSet.AddressSet.values(requestors);
+        address[] memory requestorsArray = EnumerableSet.values(requestors);
         uint currentRoundNumber = rounds.length - 1;
-        _calculateFundingForRequests(requestorsArray, currentRoundNumber);
+        allocateFunding(requestorsArray, currentRoundNumber);
         emit FundingAllocated(requestorsArray, currentRoundNumber);
         }
 
-    //Simple algorithm for funding for now but can be improved
-    function _calculateFundingForRequests(address[] memory _requestorsArray, uint _currentRoundNumber) internal {
-        for (uint i = 0; i < _requestorsArray; i++) {
-            Request[] memory requestsArray = requests[_requestorsArray[i]][rounds.length - 1];
-            for (uint j = 0; j < requestsArray; j++ ){
-                if (rounds[_currentRoundNumber].totalFundsDonated >= rounds[_currentRoundNumber].totalFundsRequested) {
+    //Simple algorithm for funding for now but can be replaced in the future
+    function _allocateFunding(address[] memory _requestorsArray, uint _currentRoundNumber) internal {
+        for (uint i = 0; i < _requestorsArray.length; i++) {
+            Request[] storage requestsArray = requests[_requestorsArray[i]][rounds.length - 1];
+            for (uint j = 0; j < requestsArray.length; j++ ){
+                if (rounds[_currentRoundNumber].totalFundsInWei >= rounds[_currentRoundNumber].totalFundsRequested) {
                     requestsArray[j].amountFundedInWei = requestsArray[j].requestAmountInWei;
                 } else {
-                    requestsArray[j].amountFundedInWei = rounds[_currentRoundNumber].totalFundsDonated / rounds[_currentRoundNumber].totalRequests;
+                    requestsArray[j].amountFundedInWei = rounds[_currentRoundNumber].totalFundsInWei / rounds[_currentRoundNumber].totalRequests;
                 }
             }
         }
     }
-    function settleRequests() public view checkTime onlyPhase(Phases.Settlement){
+    function settleRequests() public checkTime onlyPhase(Phases.Settlement){
         require(requests[msg.sender][rounds.length - 1].length > 0, "No requests to settle");
         uint currentRoundNumber = rounds.length - 1;
         uint totalSettlementAmount;
-        for (uint i = 0; i < requests[msg.sender][currentRoundNumber]; i++) {
+        for (uint i = 0; i < requests[msg.sender][currentRoundNumber].length; i++) {
             Request memory request = requests[msg.sender][currentRoundNumber][i];
             if (request.amountFundedInWei >= 0 && !request.hasBeenSettled) {
                 requests[msg.sender][currentRoundNumber][i].hasBeenSettled = true;
                 totalSettlementAmount += request.amountFundedInWei;
                 emit RequestSettled(msg.sender, request.amountFundedInWei);
             }
-        address(this).transfer(msg.sender, totalSettlementAmount);
+        payable(address(this)).transfer(totalSettlementAmount);
         }
+    }
+
+    function withdrawTokenRewards () public {
+        require(rewardBalances[msg.sender] > 0, "No token rewards to claim");
+        uint tokenRewards = rewardBalances[msg.sender];
+        rewardsToken.mint(msg.sender, tokenRewards);
+        rewardBalances[msg.sender] = 0;
+        emit TokenRewardsWithdrawn(msg.sender, tokenRewards);
     }
 
 
@@ -204,7 +238,6 @@ contract RequestManager {
     }
 
     function getCurrentRoundStartTime() public view returns (uint) {
-        Round memory currentRound = rounds[rounds.length - 1];
         return rounds[rounds.length - 1].startTime;
     }
 
@@ -230,5 +263,9 @@ contract RequestManager {
 
     function getRequestToDonationRatio(address requester) public view returns (uint) {
         return requestToDonationRatios[requester].numberRequests / requestToDonationRatios[requester].numberDonations;
+    }
+
+    function getRewardsBalance (address requester) public view returns (uint) {
+        return rewardBalances[requester];
     }
 }
