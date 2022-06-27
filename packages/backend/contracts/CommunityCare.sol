@@ -159,13 +159,12 @@ contract CommunityCare {
         require(msg.value > 0, "Donation amount must be greater than zero");
 
         uint currentRoundNumber = rounds.length - 1;
-        uint donationId = donations[msg.sender][currentRoundNumber].length + 1;
         uint donationTime = block.timestamp;
 
         Donation memory newDonation = Donation(
-            donationId,
             donationTime,
-            msg.value
+            msg.value,
+            true
         );
 
         donations[msg.sender][currentRoundNumber].push(newDonation);
@@ -181,20 +180,19 @@ contract CommunityCare {
             emit TokenRewardsGenerated(msg.sender, tokenRewards);
         }
 
-        emit DonationToRequestCreated(msg.sender, msg.value);
+        emit DonationToRequestCreated(msg.sender, msg.value, _requestId);
     }
 
     function donateToCommonPool() public payable checkTime onlyPhase(Phases.Funding){
         require(msg.value > 0, "Donation amount must be greater than zero");
 
         uint currentRoundNumber = rounds.length - 1;
-        uint donationId = donations[msg.sender][currentRoundNumber].length + 1;
         uint donationTime = block.timestamp;
 
         Donation memory newDonation = Donation(
-            donationId,
             donationTime,
-            msg.value
+            msg.value,
+            false
         );
 
         donations[msg.sender][currentRoundNumber].push(newDonation);
@@ -324,7 +322,7 @@ contract CommunityCare {
         uint totalRewards;
         RTDRatio memory rtdRatio = requestToDonationRatios[donator];
         uint ratioUint = rtdRatio.numberRequests / rtdRatio.numberDonations;
-        ratioUint > 1e18 ? totalRewards = (donationAmount * ratioUint) / 1000 : totalRewards = 0;
+        ratioUint > 1e18 ? totalRewards = donationAmount * ratioUint * 50e18   : totalRewards = 0;
         return totalRewards;
     }
 
