@@ -63,12 +63,10 @@ contract RequestManager {
     mapping (address => RTDRatio) public requestToDonationRatios;
     Round[] public rounds;
     
-
-    event AidRoundStarted(uint indexed currentRound, uint indexed startTime);
-    event AidRoundEnded(uint indexed currentRound, uint indexed endTime);
+    event PhaseStarted(uint indexed roundNumber, Phases indexed phase);
     event RequestSubmitted(address indexed requester, uint indexed requestAmountInWei);
-    event RequestFunded(address indexed requester, uint indexed requestAmountInWei, address funder, uint indexed fundingAmountInWei);
-    event RequestsSettled(address indexed requester, uint indexed currentRoundNumberNumber);
+    event FundingAllocated(address[] indexed requesters, uint currentRoundNumber);
+    event RequestSettled(address indexed requester, uint indexed requestAmountInWei);
 
     //State machine modifiers
     modifier onlyPhase(Phases phase) {
@@ -93,6 +91,7 @@ contract RequestManager {
     function _nextPhase() internal {
         Round memory currentRound = rounds[rounds.length - 1];
         currentRound.currentPhase = Phases(uint(currentRound.currentPhase) + 1);
+        emit PhaseStarted(rounds.length - 1, currentRound.currentPhase);
     }
 
 
@@ -160,33 +159,38 @@ contract RequestManager {
     }
 
     function allocateFundingPool() public checkTime onlyPhase(Phases.Allocation) {
-
         address[] memory requestorsArray = EnumerableSet.AddressSet.values(requestors);
         uint currentRoundNumber = rounds.length - 1;
-        for (uint i = 0; i < requestorsArray; i++) {
-            Request[] memory requestsArray = requests[requestorsArray[i]][rounds.length - 1];
-            for (uint j = 0; j < requestsArray; j++ ){
+        _calculateFundingForRequests(requestorsArray, currentRoundNumber);
+        emit FundingAllocated(requestorsArray, currentRoundNumber);
+        }
 
-                    //Simple algorithm for funding for now
-                    if (rounds[currentRoundNumber].totalFundsDonated >= rounds[currentRoundNumber].totalFundsRequested) {
-                        requestsArray[j].amountFundedInWei = requestsArray[j].requestAmountInWei;
-                    } else {
-                        requestsArray[j].amountFundedInWei = rounds[currentRoundNumber].totalFundsDonated / rounds[currentRoundNumber].totalRequests;
-                    }
+    //Simple algorithm for funding for now but can be improved
+    function _calculateFundingForRequests(address[] memory _requestorsArray, uint _currentRoundNumber) internal {
+        for (uint i = 0; i < _requestorsArray; i++) {
+            Request[] memory requestsArray = requests[_requestorsArray[i]][rounds.length - 1];
+            for (uint j = 0; j < requestsArray; j++ ){
+                if (rounds[_currentRoundNumber].totalFundsDonated >= rounds[_currentRoundNumber].totalFundsRequested) {
+                    requestsArray[j].amountFundedInWei = requestsArray[j].requestAmountInWei;
+                } else {
+                    requestsArray[j].amountFundedInWei = rounds[_currentRoundNumber].totalFundsDonated / rounds[_currentRoundNumber].totalRequests;
                 }
             }
         }
-
-    function settleAidRequests() public view checkTime onlyPhase(Phases.Settlement){
+    }
+    function settleRequests() public view checkTime onlyPhase(Phases.Settlement){
+        require(requests[msg.sender][rounds.length - 1].length > 0, "No requests to settle");
         uint currentRoundNumber = rounds.length - 1;
+        uint totalSettlementAmount;
         for (uint i = 0; i < requests[msg.sender][currentRoundNumber]; i++) {
-            if (requests[msg.sender][currentRoundNumber][i].amountFundedInWei >= 0) {
+            Request memory request = requests[msg.sender][currentRoundNumber][i];
+            if (request.amountFundedInWei >= 0 && !request.hasBeenSettled) {
                 requests[msg.sender][currentRoundNumber][i].hasBeenSettled = true;
-                address(this).transfer(msg.sender, requests[msg.sender][currentRoundNumber][i].amountFundedInWei);
+                totalSettlementAmount += request.amountFundedInWei;
+                emit RequestSettled(msg.sender, request.amountFundedInWei);
             }
+        address(this).transfer(msg.sender, totalSettlementAmount);
         }
-
-        emit RequestsSettled(msg.sender, currentRoundNumber);
     }
 
 
