@@ -19,7 +19,7 @@ contract CommunityCare {
     uint256 public settlementPhaseDuration;
 
     //Common funding pool
-    uint256 public commonPool;
+    uint256 internal commonPoolBalance;
 
     enum Phases {
         Request,
@@ -72,7 +72,9 @@ contract CommunityCare {
     CareToken internal rewardsToken;
     
 
-    //Events
+    /***************************************************************************
+     ************************** Events *****************************************
+     ***************************************************************************/
     event PhaseStarted(uint indexed roundNumber, Phases indexed phase);
     event RequestCreated(address indexed requester, uint indexed requestAmountInWei);
     event DonationToCommonPoolCreated(address indexed donator, uint indexed donationAmountInWei);
@@ -90,7 +92,10 @@ contract CommunityCare {
         rewardsToken = CareToken(_rewardsToken);
     }
 
-    //State machine modifiers
+    /***************************************************************************
+     ************************** State Machine Modifiers ************************
+     ***************************************************************************/
+
     modifier onlyPhase(Phases phase) {
         require(phase == rounds[rounds.length - 1].currentPhase, "Operation not allowed during this phase");
         _;
@@ -108,12 +113,6 @@ contract CommunityCare {
             _nextPhase();
         }
         _;
-    }
-
-    function _nextPhase() internal {
-        Round memory currentRound = rounds[rounds.length - 1];
-        currentRound.currentPhase = Phases(uint(currentRound.currentPhase) + 1);
-        emit PhaseStarted(rounds.length - 1, currentRound.currentPhase);
     }
 
 
@@ -214,16 +213,6 @@ contract CommunityCare {
         emit DonationToCommonPoolCreated(msg.sender, msg.value);
     }
 
-
-    //Simple algorithm for token rewards for now but can be replaced in the future
-    function _calculateTokenRewards(address donator, uint donationAmount) internal view returns (uint tokenRewards) {
-        uint totalRewards;
-        RTDRatio memory rtdRatio = requestToDonationRatios[donator];
-        uint ratioUint = rtdRatio.numberRequests / rtdRatio.numberDonations;
-        ratioUint > 1e18 ? totalRewards = (donationAmount * ratioUint) / 1000 : totalRewards = 0;
-        return totalRewards;
-    }
-
     function allocateFundingPool() public checkTime onlyPhase(Phases.Allocation) {
         require(rounds[rounds.length - 1].totalFundsInWei > 0, "No funding to allocate");
 
@@ -233,20 +222,6 @@ contract CommunityCare {
 
         emit FundingAllocated(requestorsArray, currentRoundNumber);
         }
-
-    //Simple algorithm for funding for now but can be replaced in the future
-    function _allocateFunding(address[] memory _requestorsArray, uint _currentRoundNumber) internal {
-        for (uint i = 0; i < _requestorsArray.length; i++) {
-            Request[] storage requestsArray = requests[_requestorsArray[i]][rounds.length - 1];
-            for (uint j = 0; j < requestsArray.length; j++ ){
-                if (rounds[_currentRoundNumber].totalFundsInWei >= rounds[_currentRoundNumber].totalFundsRequested) {
-                    requestsArray[j].amountFundedInWei = requestsArray[j].requestAmountInWei;
-                } else {
-                    requestsArray[j].amountFundedInWei = rounds[_currentRoundNumber].totalFundsInWei / rounds[_currentRoundNumber].totalRequests;
-                }
-            }
-        }
-    }
 
     function settleRequests() public checkTime onlyPhase(Phases.Settlement){
         require(requests[msg.sender][rounds.length - 1].length > 0, "No requests to settle");
@@ -276,12 +251,15 @@ contract CommunityCare {
     }
 
 
-    // Getter functions
+    /***************************************************************************
+     **************************  Getter Functions ******************************
+     ***************************************************************************/
+
     function getCurrentRoundNumber() public view returns (uint) {
         return rounds.length - 1;
     }
 
-    function getCurrentRound() public view returns (Round memory) {
+    function getCurrentRoundData() public view returns (Round memory) {
         return rounds[rounds.length - 1];
     }
 
@@ -317,5 +295,41 @@ contract CommunityCare {
         return rewardBalances[requester];
     }
 
-    //Internal functions
+    function getCommonPoolBalance () public view returns (uint) {
+        return commonPoolBalance;
+    }
+
+    /***************************************************************************
+     **************************  Internal Functions ****************************
+     ***************************************************************************/
+
+    //Simple algorithm for funding for now but can be replaced in the future
+    function _allocateFunding(address[] memory _requestorsArray, uint _currentRoundNumber) internal {
+        for (uint i = 0; i < _requestorsArray.length; i++) {
+            Request[] storage requestsArray = requests[_requestorsArray[i]][rounds.length - 1];
+            for (uint j = 0; j < requestsArray.length; j++ ){
+                if (rounds[_currentRoundNumber].totalFundsInWei >= rounds[_currentRoundNumber].totalFundsRequested) {
+                    requestsArray[j].amountFundedInWei = requestsArray[j].requestAmountInWei;
+                } else {
+                    requestsArray[j].amountFundedInWei = rounds[_currentRoundNumber].totalFundsInWei / rounds[_currentRoundNumber].totalRequests;
+                }
+            }
+        }
+    }
+
+
+    //Simple algorithm for token rewards for now but can be replaced in the future
+    function _calculateTokenRewards(address donator, uint donationAmount) internal view returns (uint tokenRewards) {
+        uint totalRewards;
+        RTDRatio memory rtdRatio = requestToDonationRatios[donator];
+        uint ratioUint = rtdRatio.numberRequests / rtdRatio.numberDonations;
+        ratioUint > 1e18 ? totalRewards = (donationAmount * ratioUint) / 1000 : totalRewards = 0;
+        return totalRewards;
+    }
+
+    function _nextPhase() internal {
+        Round memory currentRound = rounds[rounds.length - 1];
+        currentRound.currentPhase = Phases(uint(currentRound.currentPhase) + 1);
+        emit PhaseStarted(rounds.length - 1, currentRound.currentPhase);
+    }
 }
