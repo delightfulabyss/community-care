@@ -47,11 +47,13 @@ contract CommunityCare {
         uint amountFundedInWei;
         bool hasBeenSettled;
     }
+
     struct Donation {
         uint donationId;
         uint donationTime;
         uint donationAmountInWei;
     }
+
     struct RTDRatio {
         uint numberRequests;
         uint numberDonations;
@@ -127,8 +129,8 @@ contract CommunityCare {
     // Submit an aid request
     function submitAidRequest(string memory title, string memory description, uint requestAmountInWei, string memory supportingDocumentation) public checkTime onlyPhase(Phases.Request){
         require(requestAmountInWei > 0, "Request amount must be greater than zero");
-        uint currentRoundNumber = rounds.length - 1;
 
+        uint currentRoundNumber = rounds.length - 1;
         Request memory newRequest = Request(
             msg.sender,
             block.timestamp,
@@ -139,6 +141,7 @@ contract CommunityCare {
             0,
             false
         );
+
         requests[msg.sender][currentRoundNumber].push(newRequest);
         rounds[currentRoundNumber].totalRequests++;
         rounds[currentRoundNumber].totalFundsRequested += requestAmountInWei;
@@ -159,6 +162,7 @@ contract CommunityCare {
             donationTime,
             msg.value
         );
+
         donations[msg.sender][currentRoundNumber].push(newDonation);
         rounds[currentRoundNumber].totalDonations++;
         rounds[currentRoundNumber].totalFundsInWei += msg.value;
@@ -185,9 +189,12 @@ contract CommunityCare {
     }
 
     function allocateFundingPool() public checkTime onlyPhase(Phases.Allocation) {
+        require(rounds[rounds.length - 1].totalFundsInWei > 0, "No funding to allocate");
+
         address[] memory requestorsArray = EnumerableSet.values(requestors);
         uint currentRoundNumber = rounds.length - 1;
         _allocateFunding(requestorsArray, currentRoundNumber);
+        
         emit FundingAllocated(requestorsArray, currentRoundNumber);
         }
 
@@ -206,8 +213,10 @@ contract CommunityCare {
     }
     function settleRequests() public checkTime onlyPhase(Phases.Settlement){
         require(requests[msg.sender][rounds.length - 1].length > 0, "No requests to settle");
+
         uint currentRoundNumber = rounds.length - 1;
         uint totalSettlementAmount;
+
         for (uint i = 0; i < requests[msg.sender][currentRoundNumber].length; i++) {
             Request memory request = requests[msg.sender][currentRoundNumber][i];
             if (request.amountFundedInWei >= 0 && !request.hasBeenSettled) {
@@ -221,9 +230,11 @@ contract CommunityCare {
 
     function withdrawTokenRewards () public {
         require(rewardBalances[msg.sender] > 0, "No token rewards to claim");
+
         uint tokenRewards = rewardBalances[msg.sender];
         rewardsToken.mint(msg.sender, tokenRewards);
         rewardBalances[msg.sender] = 0;
+
         emit TokenRewardsWithdrawn(msg.sender, tokenRewards);
     }
 
