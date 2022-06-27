@@ -18,6 +18,9 @@ contract CommunityCare {
     // The settlement period duration.
     uint256 public settlementPhaseDuration;
 
+    //Common funding pool
+    uint256 public commonPool;
+
     enum Phases {
         Request,
         Funding,
@@ -53,7 +56,7 @@ contract CommunityCare {
         uint donationTime;
         uint donationAmountInWei;
     }
-
+    //Long integers to allow for ratios below 1
     struct RTDRatio {
         uint numberRequests;
         uint numberDonations;
@@ -68,9 +71,12 @@ contract CommunityCare {
     Round[] public rounds;
     CareToken internal rewardsToken;
     
+
+    //Events
     event PhaseStarted(uint indexed roundNumber, Phases indexed phase);
-    event RequestSubmitted(address indexed requester, uint indexed requestAmountInWei);
-    event DonationSubmitted(address indexed donator, uint indexed donationAmountInWei);
+    event RequestCreated(address indexed requester, uint indexed requestAmountInWei);
+    event DonationToCommonPoolCreated(address indexed donator, uint indexed donationAmountInWei);
+    event DonationToRequestCreated(address indexed donator, uint indexed donationAmountInWei, uint indexed requestId);
     event TokenRewardsGenerated(address indexed requester, uint indexed rewardAmountInWei);
     event TokenRewardsWithdrawn(address indexed requester, uint indexed rewardAmountInWei);
     event FundingAllocated(address[] indexed requesters, uint currentRoundNumber);
@@ -86,7 +92,7 @@ contract CommunityCare {
 
     //State machine modifiers
     modifier onlyPhase(Phases phase) {
-        require(phase == rounds[rounds.length - 1].currentPhase, "Operation not allowed at this phase");
+        require(phase == rounds[rounds.length - 1].currentPhase, "Operation not allowed during this phase");
         _;
     }
 
@@ -127,7 +133,7 @@ contract CommunityCare {
     }
 
     // Submit an aid request
-    function submitAidRequest(string memory title, string memory description, uint requestAmountInWei, string memory supportingDocumentation) public checkTime onlyPhase(Phases.Request){
+    function createRequest(string memory title, string memory description, uint requestAmountInWei, string memory supportingDocumentation) public checkTime onlyPhase(Phases.Request){
         require(requestAmountInWei > 0, "Request amount must be greater than zero");
 
         uint currentRoundNumber = rounds.length - 1;
@@ -145,12 +151,12 @@ contract CommunityCare {
         requests[msg.sender][currentRoundNumber].push(newRequest);
         rounds[currentRoundNumber].totalRequests++;
         rounds[currentRoundNumber].totalFundsRequested += requestAmountInWei;
-        requestToDonationRatios[msg.sender].numberRequests += 1e18;
+        requestToDonationRatios[msg.sender].numberRequests += 1e18; 
         EnumerableSet.contains(requestors, msg.sender) ? false : donators.add(msg.sender);
+        emit RequestCreated(msg.sender, requestAmountInWei);
     }
 
-    // Donate to funding pool
-    function donateToFundingPool() public payable checkTime onlyPhase(Phases.Funding) {
+    function donateToRequest(uint _requestId) public payable checkTime onlyPhase(Phases.Funding) {
         require(msg.value > 0, "Donation amount must be greater than zero");
 
         uint currentRoundNumber = rounds.length - 1;
@@ -175,9 +181,39 @@ contract CommunityCare {
             rewardBalances[msg.sender] += tokenRewards;
             emit TokenRewardsGenerated(msg.sender, tokenRewards);
         }
-        emit DonationSubmitted(msg.sender, msg.value);
-        
+
+        emit DonationToRequestCreated(msg.sender, msg.value);
     }
+
+    function donateToCommonPool() public payable checkTime onlyPhase(Phases.Funding){
+        require(msg.value > 0, "Donation amount must be greater than zero");
+
+        uint currentRoundNumber = rounds.length - 1;
+        uint donationId = donations[msg.sender][currentRoundNumber].length + 1;
+        uint donationTime = block.timestamp;
+
+        Donation memory newDonation = Donation(
+            donationId,
+            donationTime,
+            msg.value
+        );
+
+        donations[msg.sender][currentRoundNumber].push(newDonation);
+        rounds[currentRoundNumber].totalDonations++;
+        rounds[currentRoundNumber].totalFundsInWei += msg.value;
+        requestToDonationRatios[msg.sender].numberDonations += 1e18;
+        EnumerableSet.contains(donators, msg.sender) ? false : donators.add(msg.sender);
+
+        //Calculate rewards and add to reward balance
+        uint tokenRewards = _calculateTokenRewards(msg.sender, msg.value);
+        if (tokenRewards > 0) {
+            rewardBalances[msg.sender] += tokenRewards;
+            emit TokenRewardsGenerated(msg.sender, tokenRewards);
+        }
+
+        emit DonationToCommonPoolCreated(msg.sender, msg.value);
+    }
+
 
     //Simple algorithm for token rewards for now but can be replaced in the future
     function _calculateTokenRewards(address donator, uint donationAmount) internal view returns (uint tokenRewards) {
@@ -194,7 +230,7 @@ contract CommunityCare {
         address[] memory requestorsArray = EnumerableSet.values(requestors);
         uint currentRoundNumber = rounds.length - 1;
         _allocateFunding(requestorsArray, currentRoundNumber);
-        
+
         emit FundingAllocated(requestorsArray, currentRoundNumber);
         }
 
@@ -211,6 +247,7 @@ contract CommunityCare {
             }
         }
     }
+
     function settleRequests() public checkTime onlyPhase(Phases.Settlement){
         require(requests[msg.sender][rounds.length - 1].length > 0, "No requests to settle");
 
@@ -279,4 +316,6 @@ contract CommunityCare {
     function getRewardsBalance (address requester) public view returns (uint) {
         return rewardBalances[requester];
     }
+
+    //Internal functions
 }
