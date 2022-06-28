@@ -114,24 +114,6 @@ contract CommunityCare is Ownable {
         _;
     }
 
-    modifier checkTime(){
-        Round memory currentRound = rounds[rounds.length - 1];
-        uint requestPhase = requestPhaseDuration;
-        uint fundingPhase = fundingPhaseDuration;
-        uint allocationPhase = allocationPhaseDuration;
-        uint settlementPhase = settlementPhaseDuration;
-        if(currentRound.currentPhase == Phases.Request && block.timestamp >= currentRound.startTime + requestPhase) {
-            _nextPhase();
-        }else if (currentRound.currentPhase == Phases.Funding && block.timestamp >= currentRound.startTime + requestPhase + fundingPhase) {
-            _nextPhase();
-        }else if (currentRound.currentPhase == Phases.Allocation && block.timestamp >= currentRound.startTime + requestPhase + fundingPhase + allocationPhase) {
-            _nextPhase();
-        }else if (currentRound.currentPhase == Phases.Settlement && block.timestamp >= currentRound.startTime + requestPhase + fundingPhase + allocationPhase + settlementPhase) {
-            _nextPhase();
-        }
-        _;
-    }
-
     /***************************************************************************
      ************************** Public Functions *******************************
      ***************************************************************************/
@@ -143,18 +125,19 @@ contract CommunityCare is Ownable {
      * @param _requestAmountInWei The amount requested in wei.
      * @param _supportingDocumentation Optional link to the supporting documentation of the request uploaded to IPFS/Filecoin
      */
-    function createRequest(string memory title, string memory description, uint requestAmountInWei, string memory supportingDocumentation) public checkTime onlyPhase(Phases.Request){
-        require(requestAmountInWei > 0, "Request amount must be greater than zero");
-
+    function createRequest(string memory _title, string memory _description, uint _requestAmountInWei, string memory _supportingDocumentation) public onlyPhase(Phases.Request){
+        require(_requestAmountInWei > 0, "Request amount must be greater than zero");
+        
+        _checkTime();
         uint currentRoundNumber = rounds.length - 1;
         Request memory newRequest = Request(
             string.concat(Strings.toHexString(uint160(msg.sender)), "-", Strings.toString(block.timestamp)),
             msg.sender,
             block.timestamp,
-            title,
-            description,
-            requestAmountInWei,
-            supportingDocumentation,
+            _title,
+            _description,
+            _requestAmountInWei,
+            _supportingDocumentation,
             0,
             0,
             false
@@ -162,33 +145,36 @@ contract CommunityCare is Ownable {
 
         requests[msg.sender][currentRoundNumber].push(newRequest);
         rounds[currentRoundNumber].totalRequests++;
-        rounds[currentRoundNumber].totalFundsRequested += requestAmountInWei;
+        rounds[currentRoundNumber].totalFundsRequested += _requestAmountInWei;
         requestToDonationRatios[msg.sender].numberRequests += 1e18; 
         EnumerableSet.contains(requestors, msg.sender) ? false : donators.add(msg.sender);
-        emit RequestCreated(msg.sender, requestAmountInWei);
+        emit RequestCreated(msg.sender, _requestAmountInWei);
     }
     /**
      * @notice Creates a new donation.
      * @dev This function calls the internal _donate function.
      * @param _requestId The id of the request to donate to. If empty, the donation is made to the common funding pool.
      */
-    function donate(string memory _requestId) public payable checkTime onlyPhase(Phases.Funding) {
+    function donate(string memory _requestId) public payable onlyPhase(Phases.Funding) {
         require(msg.value > 0, "Donation amount must be greater than zero");
+        _checkTime();
         _donate(msg.sender, msg.value, _requestId);
         emit DonationToRequestCreated(msg.sender, msg.value, _requestId);
     }
 
-    function donate() public payable checkTime onlyPhase(Phases.Funding){
+    function donate() public payable onlyPhase(Phases.Funding){
         require(msg.value > 0, "Donation amount must be greater than zero");
+        _checkTime();
         _donate(msg.sender, msg.value, "");
         emit DonationToCommonPoolCreated(msg.sender, msg.value);
     }
     /**
      * @notice Settles all requests for the given user.
      */
-    function settleRequests() public checkTime onlyPhase(Phases.Settlement){
+    function settleRequests() public onlyPhase(Phases.Settlement){
         require(requests[msg.sender][rounds.length - 1].length > 0, "No requests to settle");
 
+        _checkTime();
         uint currentRoundNumber = rounds.length - 1;
         uint totalSettlementAmount;
 
@@ -202,7 +188,6 @@ contract CommunityCare is Ownable {
         rounds[currentRoundNumber].totalSettlementsInWei += totalSettlementAmount;
         }
         payable(address(this)).transfer(totalSettlementAmount);
-        }
     }
 
     /**
@@ -228,7 +213,8 @@ contract CommunityCare is Ownable {
       * @notice Allocates funds in the common pool to the current round's requesters.
       * @dev This function calls the internal _allocateCommonPool function.
       */
-    function allocateCommonPool() public checkTime onlyPhase(Phases.Allocation) onlyOwner {
+    function allocateCommonPool() public onlyPhase(Phases.Allocation) onlyOwner {
+        _checktime();
         address[] memory requestorsArray = EnumerableSet.values(requestors);
         uint currentRoundNumber = rounds.length - 1;
         _allocateCommonPool(requestorsArray, currentRoundNumber);
@@ -248,8 +234,7 @@ contract CommunityCare is Ownable {
             0,
             0,
             0,
-            0,
-            false
+            0
         );
         rounds.push(newRound);
     }
@@ -267,9 +252,10 @@ contract CommunityCare is Ownable {
         require(rounds[rounds.length - 1].totalDonationsToCommonPool > 0, "No funding to allocate");
         for (uint i = 0; i < _requestorsArray.length; i++) {
             address requester = _requestorsArray[i];
-            Request[] memory requests = requests[requester][_currentRoundNumber];
-            for(uint j = 0; j < requests.length; j++) {
+            Request[] memory requestsCopy = requests[requester][_currentRoundNumber];
+            for(uint j = 0; j < requestsCopy.length; j++) {
                 Request storage request = requests[requester][_currentRoundNumber][j];
+                Round storage round = rounds[_currentRoundNumber];
                 uint256 totalDonationsToRequest = request.numberOfDonations;
                 uint256 totalDonationsInRound = round.totalDonationsToRequests + round.totalDonationsToCommonPool;
                 uint256 allocation = commonPoolBalanceInWei / (totalDonationsToRequest / totalDonationsInRound);
@@ -342,5 +328,30 @@ contract CommunityCare is Ownable {
         Round memory currentRound = rounds[rounds.length - 1];
         currentRound.currentPhase = Phases(uint(currentRound.currentPhase) + 1);
         emit PhaseStarted(rounds.length - 1, currentRound.currentPhase);
+    }
+
+    function _checkTime() internal {
+        Round memory currentRound = rounds[rounds.length - 1];
+        uint requestPhase = requestPhaseDuration;
+        uint fundingPhase = fundingPhaseDuration;
+        uint allocationPhase = allocationPhaseDuration;
+        uint settlementPhase = settlementPhaseDuration;
+        if(currentRound.currentPhase == Phases.Request) {
+            if(block.timestamp >= currentRound.startTime + requestPhase + fundingPhase) {
+                _nextPhase();
+            }
+        } else if(currentRound.currentPhase == Phases.Funding) {
+            if(block.timestamp >= currentRound.startTime + requestPhase + fundingPhase + allocationPhase) {
+                _nextPhase();
+            }
+        } else if(currentRound.currentPhase == Phases.Allocation) {
+            if(block.timestamp >= currentRound.startTime + requestPhase + fundingPhase + allocationPhase + settlementPhase) {
+                _nextPhase();
+            }
+        } else if(currentRound.currentPhase == Phases.Settlement) {
+            if(block.timestamp >= currentRound.startTime + requestPhase + fundingPhase + allocationPhase + settlementPhase + settlementPhaseDuration) {
+                _nextPhase();
+            }
+        }
     }
 }
