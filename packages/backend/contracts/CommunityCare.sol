@@ -35,7 +35,7 @@ contract CommunityCare {
         uint totalRequests;
         Phases currentPhase;
         uint totalFundsRequested;
-        uint totalDonations;
+        uint totalDonationsToCommonPool;
         uint totalDonationsToRequests;
         uint totalFundsInWei;
         uint totalSettlementsInWei;
@@ -176,7 +176,6 @@ contract CommunityCare {
     }
 
     function allocateFundingPool() public checkTime onlyPhase(Phases.Allocation) {
-        require(rounds[rounds.length - 1].totalFundsInWei > 0, "No funding to allocate");
         address[] memory requestorsArray = EnumerableSet.values(requestors);
         uint currentRoundNumber = rounds.length - 1;
         _allocateFunding(requestorsArray, currentRoundNumber);
@@ -265,14 +264,17 @@ contract CommunityCare {
 
     //Simple algorithm for funding for now but can be replaced in the future
     function _allocateFunding(address[] memory _requestorsArray, uint _currentRoundNumber) internal {
+        require(_requestorsArray.length > 0, "No requests to allocate funding to");
+        require(rounds[rounds.length - 1].totalDonationsToCommonPool > 0, "No funding to allocate");
         for (uint i = 0; i < _requestorsArray.length; i++) {
             address requester = _requestorsArray[i];
+            Round memory round = rounds[_currentRoundNumber];
             for(uint j = 0; j < requests[requester][_currentRoundNumber].length; j++) {
                 Request storage request = requests[requester][_currentRoundNumber][j];
                 uint256 commonPoolBalanceCopy = commonPoolBalanceInWei;
-                uint256 requestNumberOfDonations = request.numberOfDonations;
-                uint256 totalDonationsInRound = 0;
-                uint256 allocation = commonPoolBalanceCopy/ (requestNumberOfDonations / totalDonationsInRound);
+                uint256 numberDonationsToRequest = request.numberOfDonations;
+                uint256 totalDonationsInRound = round.totalDonationsToRequests + round.totalDonationsToCommonPool;
+                uint256 allocation = commonPoolBalanceCopy / (totalDonationsToRequest / totalDonationsInRound);
                 request.amountFundedInWei += allocation;
             }
         }
@@ -291,21 +293,24 @@ contract CommunityCare {
         );
 
         donations[msg.sender][currentRoundNumber].push(newDonation);
+
+        //Check if donation is for a request or common pool
         if (_requestId.length > 0) {
             Request memory requestArray = requests[msg.sender][currentRoundNumber];
             for (uint i = 0; i < requestArray.length; i++) {
                 if (requestArray[i].requestId == _requestId) {
                     requestArray[i].amountFundedInWei += msg.value;
                     requestArray[i].numberDonations++;
+                    rounds[currentRoundNumber].totalDonationstoRequests++;
                 }
             }
         } else {
+            rounds[currentRoundNumber].totalDonationstoCommonPool++;
             commonPoolBalanceInWei += msg.value;
         }
+        
         requestToDonationRatios[msg.sender].numberDonations += 1e18;
         EnumerableSet.contains(donators, msg.sender) ? false : donators.add(msg.sender);
-
-        rounds[currentRoundNumber].totalDonations++;
         rounds[currentRoundNumber].totalFundsInWei += msg.value;
 
         //Calculate rewards and add to reward balance
