@@ -2,9 +2,14 @@
 pragma solidity ^0.8.14;
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "./ERC20.sol";
 
-contract CommunityCare {
+contract CommunityCare is Ownable {
+
+    /***************************************************************************
+     ************************** State Variables ********************************
+     ***************************************************************************/
 
     using EnumerableSet for EnumerableSet.AddressSet;
     
@@ -38,7 +43,7 @@ contract CommunityCare {
         uint totalFundsRequested;
         uint totalDonationsToCommonPool;
         uint totalDonationsToRequests;
-        uint totalFundsInWei;
+        uint totalFundsDonatedInWei;
         uint totalSettlementsInWei;
 
     }
@@ -81,13 +86,14 @@ contract CommunityCare {
     /***************************************************************************
      ************************** Events *****************************************
      ***************************************************************************/
+
     event PhaseStarted(uint indexed roundNumber, Phases indexed phase);
     event RequestCreated(address indexed requester, uint indexed requestAmountInWei);
     event DonationToCommonPoolCreated(address indexed donator, uint indexed donationAmountInWei);
     event DonationToRequestCreated(address indexed donator, uint indexed donationAmountInWei, string indexed requestTitle);
     event TokenRewardsGenerated(address indexed requester, uint indexed rewardAmountInWei);
-    event TokenRewardsWithdrawn(address indexed requester, uint indexed rewardAmountInWei);
-    event FundingAllocated(address[] indexed requesters, uint currentRoundNumber);
+    event TokenRewardsClaimed(address indexed requester, uint indexed rewardAmountInWei);
+    event CommonPoolAllocated(address[] indexed requesters, uint currentRoundNumber);
     event RequestSettled(address indexed requester, uint indexed requestAmountInWei);
 
     constructor(uint _requestPhaseDuration, uint _fundingPhaseDuration, uint _allocationPhaseDuration, uint _settlementPhaseDuration, address _rewardsToken){
@@ -99,8 +105,9 @@ contract CommunityCare {
     }
 
     /***************************************************************************
-     ************************** State Machine Modifiers ************************
+     ************************** Modifiers **************************************
      ***************************************************************************/
+
 
     modifier onlyPhase(Phases phase) {
         require(phase == rounds[rounds.length - 1].currentPhase, "Operation not allowed during this phase");
@@ -109,36 +116,33 @@ contract CommunityCare {
 
     modifier checkTime(){
         Round memory currentRound = rounds[rounds.length - 1];
-        if(currentRound.currentPhase == Phases.Request && block.timestamp >= currentRound.startTime + requestPhaseDuration) {
+        uint requestPhase = requestPhaseDuration;
+        uint fundingPhase = fundingPhaseDuration;
+        uint allocationPhase = allocationPhaseDuration;
+        uint settlementPhase = settlementPhaseDuration;
+        if(currentRound.currentPhase == Phases.Request && block.timestamp >= currentRound.startTime + requestPhase) {
             _nextPhase();
-        }else if (currentRound.currentPhase == Phases.Funding && block.timestamp >= currentRound.startTime + requestPhaseDuration + fundingPhaseDuration) {
+        }else if (currentRound.currentPhase == Phases.Funding && block.timestamp >= currentRound.startTime + requestPhase + fundingPhase) {
             _nextPhase();
-        }else if (currentRound.currentPhase == Phases.Allocation && block.timestamp >= currentRound.startTime + requestPhaseDuration + fundingPhaseDuration + allocationPhaseDuration) {
+        }else if (currentRound.currentPhase == Phases.Allocation && block.timestamp >= currentRound.startTime + requestPhase + fundingPhase + allocationPhase) {
             _nextPhase();
-        }else if (currentRound.currentPhase == Phases.Settlement && block.timestamp >= currentRound.startTime + requestPhaseDuration + fundingPhaseDuration + allocationPhaseDuration + settlementPhaseDuration) {
+        }else if (currentRound.currentPhase == Phases.Settlement && block.timestamp >= currentRound.startTime + requestPhase + fundingPhase + allocationPhase + settlementPhase) {
             _nextPhase();
         }
         _;
     }
 
+    /***************************************************************************
+     ************************** Public Functions *******************************
+     ***************************************************************************/
 
-    // Start new round
-    function startNewRound() public {
-
-        Round memory newRound = Round(
-            block.timestamp,
-            0,
-            Phases.Request,
-            0,
-            0,
-            0,
-            0,
-            0
-        );
-        rounds.push(newRound);
-    }
-
-    // Submit an aid request
+    /**
+     * @notice Creates a new request.
+     * @param _title The title of the request.
+     * @param _description The description of the request.
+     * @param _requestAmountInWei The amount requested in wei.
+     * @param _supportingDocumentation Optional link to the supporting documentation of the request uploaded to IPFS/Filecoin
+     */
     function createRequest(string memory title, string memory description, uint requestAmountInWei, string memory supportingDocumentation) public checkTime onlyPhase(Phases.Request){
         require(requestAmountInWei > 0, "Request amount must be greater than zero");
 
@@ -163,7 +167,11 @@ contract CommunityCare {
         EnumerableSet.contains(requestors, msg.sender) ? false : donators.add(msg.sender);
         emit RequestCreated(msg.sender, requestAmountInWei);
     }
-
+    /**
+     * @notice Creates a new donation.
+     * @dev This function calls the internal _donate function.
+     * @param _requestId The id of the request to donate to. If empty, the donation is made to the common funding pool.
+     */
     function donate(string memory _requestId) public payable checkTime onlyPhase(Phases.Funding) {
         require(msg.value > 0, "Donation amount must be greater than zero");
         _donate(msg.sender, msg.value, _requestId);
@@ -175,14 +183,9 @@ contract CommunityCare {
         _donate(msg.sender, msg.value, "");
         emit DonationToCommonPoolCreated(msg.sender, msg.value);
     }
-
-    function allocateFundingPool() public checkTime onlyPhase(Phases.Allocation) {
-        address[] memory requestorsArray = EnumerableSet.values(requestors);
-        uint currentRoundNumber = rounds.length - 1;
-        _allocateFunding(requestorsArray, currentRoundNumber);
-        emit FundingAllocated(requestorsArray, currentRoundNumber);
-    }
-
+    /**
+     * @notice Settles all requests for the given user.
+     */
     function settleRequests() public checkTime onlyPhase(Phases.Settlement){
         require(requests[msg.sender][rounds.length - 1].length > 0, "No requests to settle");
 
@@ -196,75 +199,70 @@ contract CommunityCare {
                 totalSettlementAmount += request.amountFundedInWei;
                 emit RequestSettled(msg.sender, request.amountFundedInWei);
             }
+        rounds[currentRoundNumber].totalSettlementsInWei += totalSettlementAmount;
+        }
         payable(address(this)).transfer(totalSettlementAmount);
         }
     }
 
-    function withdrawTokenRewards () public {
+    /**
+     * @notice Allows a user to claim their token rewards balance.
+     */
+
+    function claimTokenRewards () public {
         require(rewardBalances[msg.sender] > 0, "No token rewards to claim");
 
         uint tokenRewards = rewardBalances[msg.sender];
         rewardsToken.mint(msg.sender, tokenRewards);
         rewardBalances[msg.sender] = 0;
 
-        emit TokenRewardsWithdrawn(msg.sender, tokenRewards);
+        emit TokenRewardsClaimed(msg.sender, tokenRewards);
     }
 
 
     /***************************************************************************
-     **************************  Getter Functions ******************************
+     **************************  Owner Functions********************************
      ***************************************************************************/
 
-    function getCurrentRoundNumber() public view returns (uint) {
-        return rounds.length - 1;
+     /**
+      * @notice Allocates funds in the common pool to the current round's requesters.
+      * @dev This function calls the internal _allocateCommonPool function.
+      */
+    function allocateCommonPool() public checkTime onlyPhase(Phases.Allocation) onlyOwner {
+        address[] memory requestorsArray = EnumerableSet.values(requestors);
+        uint currentRoundNumber = rounds.length - 1;
+        _allocateCommonPool(requestorsArray, currentRoundNumber);
+        emit CommonPoolAllocated(requestorsArray, currentRoundNumber);
     }
 
-    function getCurrentRoundData() public view returns (Round memory) {
-        return rounds[rounds.length - 1];
-    }
+    /**
+     * @notice Starts a new round
+     */
+    function startNewRound() public onlyOwner {
 
-    function getCurrentRoundStartTime() public view returns (uint) {
-        return rounds[rounds.length - 1].startTime;
+        Round memory newRound = Round(
+            block.timestamp,
+            0,
+            Phases.Request,
+            0,
+            0,
+            0,
+            0,
+            0,
+            false
+        );
+        rounds.push(newRound);
     }
-
-    function getCurrentRoundTotalRequests() public view returns (uint) {
-        return rounds[rounds.length - 1].totalRequests;
-    }
-
-    function getCurrentRoundTotalFundsInWei() public view returns (uint) {
-        return rounds[rounds.length - 1].totalFundsInWei;
-    }
-
-    function getCurrentRoundTotalSettlementsInWei() public view returns (uint) {
-        return rounds[rounds.length - 1].totalSettlementsInWei;
-    }
-
-    function getRequest(address requester, uint requestNumber) public view returns (Request memory) {
-        return requests[requester][rounds.length - 1][requestNumber];
-    }
-
-    function getDonation(address requester, uint donationNumber) public view returns (Donation memory) {
-        return donations[requester][rounds.length - 1][donationNumber];
-    }
-
-    function getRequestToDonationRatio(address requester) public view returns (uint numberRequests, uint numberDonations) {
-        return (requestToDonationRatios[requester].numberRequests, requestToDonationRatios[requester].numberDonations);
-    }
-
-    function getRewardsBalance (address requester) public view returns (uint) {
-        return rewardBalances[requester];
-    }
-
-    function getCommonPoolBalance () public view returns (uint) {
-        return commonPoolBalanceInWei;
-    }
+    
 
     /***************************************************************************
      **************************  Internal Functions ****************************
      ***************************************************************************/
 
-    //Simple algorithm for funding for now but can be replaced in the future
-    function _allocateFunding(address[] memory _requestorsArray, uint _currentRoundNumber) internal {
+    /**
+    * @dev The algorithm weighs each request based on how many donations it has received. This algorithm can be improved / replaced by the community.
+    */
+    function _allocateCommonPool(address[] memory _requestorsArray, uint _currentRoundNumber) internal {
         require(_requestorsArray.length > 0, "No requests to allocate funding to");
         require(rounds[rounds.length - 1].totalDonationsToCommonPool > 0, "No funding to allocate");
         for (uint i = 0; i < _requestorsArray.length; i++) {
@@ -272,11 +270,11 @@ contract CommunityCare {
             Round memory round = rounds[_currentRoundNumber];
             for(uint j = 0; j < requests[requester][_currentRoundNumber].length; j++) {
                 Request storage request = requests[requester][_currentRoundNumber][j];
-                uint256 commonPoolBalanceCopy = commonPoolBalanceInWei;
                 uint256 totalDonationsToRequest = request.numberOfDonations;
                 uint256 totalDonationsInRound = round.totalDonationsToRequests + round.totalDonationsToCommonPool;
-                uint256 allocation = commonPoolBalanceCopy / (totalDonationsToRequest / totalDonationsInRound);
+                uint256 allocation = commonPoolBalanceInWei / (totalDonationsToRequest / totalDonationsInRound);
                 request.amountFundedInWei += allocation;
+                commonPoolBalanceInWei -= allocation;
             }
         }
 
@@ -295,7 +293,7 @@ contract CommunityCare {
 
         donations[_donator][currentRoundNumber].push(newDonation);
 
-        //Check if donation is for a request or common pool
+        //Check if donation is for a request or common pool and take actions accordingly
         if (bytes(_requestId).length > 0) {
             for (uint i = 0; i < requests[_donator][currentRoundNumber].length; i++) {
                 string memory requestId = requests[_donator][currentRoundNumber][i].requestId;
@@ -312,7 +310,7 @@ contract CommunityCare {
 
         requestToDonationRatios[_donator].numberDonations += 1e18;
         EnumerableSet.contains(donators, _donator) ? false : donators.add(_donator);
-        rounds[currentRoundNumber].totalFundsInWei += _donationAmount;
+        rounds[currentRoundNumber].totalFundsDonatedInWei += _donationAmount;
 
         //Calculate rewards and add to reward balance
         uint tokenRewards = _calculateTokenRewards(_donator, _donationAmount);
@@ -323,7 +321,9 @@ contract CommunityCare {
 
     }
 
-    //Simple algorithm for token rewards for now but can be replaced in the future
+    /**
+    * @dev The algorithm generates token rewards by multiplying a donation's value by their request-to-donation ration. The resulting number is then multiplied by a 50x multiplyer. This algorithm can be improved / replaced by the community.
+    */
     function _calculateTokenRewards(address donator, uint donationAmount) internal view returns (uint tokenRewards) {
         uint totalRewards;
         RTDRatio memory rtdRatio = requestToDonationRatios[donator];
