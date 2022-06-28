@@ -4,9 +4,9 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract CareToken is ERC20, Ownable {
-    constructor (string name , string symbol) ERC20(name, symbol) public {}
+    constructor (string memory name , string memory symbol) ERC20(name, symbol) {}
 
     function mint(address to, uint amount) onlyOwner public {
-        _mint(amount, to);
+        _mint(to, amount);
     }
 }

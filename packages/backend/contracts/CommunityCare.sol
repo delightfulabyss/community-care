@@ -51,7 +51,7 @@ contract CommunityCare {
         string description;
         uint requestAmountInWei;
         string supportingDocumentation;
-        uint numberDonations;
+        uint numberOfDonations;
         uint amountFundedInWei;
         bool hasBeenSettled;
     }
@@ -90,7 +90,7 @@ contract CommunityCare {
     event FundingAllocated(address[] indexed requesters, uint currentRoundNumber);
     event RequestSettled(address indexed requester, uint indexed requestAmountInWei);
 
-    constructor(uint _requestPhaseDuration, uint _fundingPhaseDuration, uint _allocationPhaseDuration, uint _settlementPhaseDuration, address _rewardsToken) public {
+    constructor(uint _requestPhaseDuration, uint _fundingPhaseDuration, uint _allocationPhaseDuration, uint _settlementPhaseDuration, address _rewardsToken){
         requestPhaseDuration = _requestPhaseDuration;
         fundingPhaseDuration = _fundingPhaseDuration;
         allocationPhaseDuration = _allocationPhaseDuration;
@@ -144,7 +144,7 @@ contract CommunityCare {
 
         uint currentRoundNumber = rounds.length - 1;
         Request memory newRequest = Request(
-            string.concat(Strings.toHexString(uint160(msg.sender)), "-", Strings.toString(block.timestamp))
+            string.concat(Strings.toHexString(uint160(msg.sender)), "-", Strings.toString(block.timestamp)),
             msg.sender,
             block.timestamp,
             title,
@@ -239,12 +239,12 @@ contract CommunityCare {
         return rounds[rounds.length - 1].totalSettlementsInWei;
     }
 
-    function getRequest(address requester, uint requestId) public view returns (Request memory) {
-        return requests[requester][rounds.length - 1][requestId];
+    function getRequest(address requester, uint requestNumber) public view returns (Request memory) {
+        return requests[requester][rounds.length - 1][requestNumber];
     }
 
-    function getDonation(address requester, uint requestId, uint donationId) public view returns (Donation memory) {
-        return donations[requester][rounds.length - 1][donationId];
+    function getDonation(address requester, uint donationNumber) public view returns (Donation memory) {
+        return donations[requester][rounds.length - 1][donationNumber];
     }
 
     function getRequestToDonationRatio(address requester) public view returns (uint numberRequests, uint numberDonations) {
@@ -273,7 +273,7 @@ contract CommunityCare {
             for(uint j = 0; j < requests[requester][_currentRoundNumber].length; j++) {
                 Request storage request = requests[requester][_currentRoundNumber][j];
                 uint256 commonPoolBalanceCopy = commonPoolBalanceInWei;
-                uint256 numberDonationsToRequest = request.numberOfDonations;
+                uint256 totalDonationsToRequest = request.numberOfDonations;
                 uint256 totalDonationsInRound = round.totalDonationsToRequests + round.totalDonationsToCommonPool;
                 uint256 allocation = commonPoolBalanceCopy / (totalDonationsToRequest / totalDonationsInRound);
                 request.amountFundedInWei += allocation;
@@ -287,38 +287,38 @@ contract CommunityCare {
         uint donationTime = block.timestamp;
 
         Donation memory newDonation = Donation(
-            msg.sender
+            _donator,
             donationTime,
-            msg.value,
-            requestId
+            _donationAmount,
+            _requestId
         );
 
-        donations[msg.sender][currentRoundNumber].push(newDonation);
+        donations[_donator][currentRoundNumber].push(newDonation);
 
         //Check if donation is for a request or common pool
-        if (_requestId.length > 0) {
-            Request memory requestArray = requests[msg.sender][currentRoundNumber];
-            for (uint i = 0; i < requestArray.length; i++) {
-                if (requestArray[i].requestId == _requestId) {
-                    requestArray[i].amountFundedInWei += msg.value;
-                    requestArray[i].numberDonations++;
-                    rounds[currentRoundNumber].totalDonationstoRequests++;
+        if (bytes(_requestId).length > 0) {
+            for (uint i = 0; i < requests[_donator][currentRoundNumber].length; i++) {
+                string memory requestId = requests[_donator][currentRoundNumber][i].requestId;
+                if (keccak256(abi.encodePacked(requestId)) == keccak256(abi.encodePacked(_requestId))) {
+                    requests[_donator][currentRoundNumber][i].amountFundedInWei += _donationAmount;
+                    requests[_donator][currentRoundNumber][i].numberOfDonations++;
+                    rounds[currentRoundNumber].totalDonationsToRequests++;
                 }
             }
         } else {
-            rounds[currentRoundNumber].totalDonationstoCommonPool++;
-            commonPoolBalanceInWei += msg.value;
+            rounds[currentRoundNumber].totalDonationsToCommonPool++;
+            commonPoolBalanceInWei += _donationAmount;
         }
 
-        requestToDonationRatios[msg.sender].numberDonations += 1e18;
-        EnumerableSet.contains(donators, msg.sender) ? false : donators.add(msg.sender);
-        rounds[currentRoundNumber].totalFundsInWei += msg.value;
+        requestToDonationRatios[_donator].numberDonations += 1e18;
+        EnumerableSet.contains(donators, _donator) ? false : donators.add(_donator);
+        rounds[currentRoundNumber].totalFundsInWei += _donationAmount;
 
         //Calculate rewards and add to reward balance
-        uint tokenRewards = _calculateTokenRewards(msg.sender, msg.value);
+        uint tokenRewards = _calculateTokenRewards(_donator, _donationAmount);
         if (tokenRewards > 0) {
-            rewardBalances[msg.sender] += tokenRewards;
-            emit TokenRewardsGenerated(msg.sender, tokenRewards);
+            rewardBalances[_donator] += tokenRewards;
+            emit TokenRewardsGenerated(_donator, tokenRewards);
         }
 
     }
