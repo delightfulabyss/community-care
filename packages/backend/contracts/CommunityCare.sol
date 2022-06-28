@@ -247,8 +247,8 @@ contract CommunityCare {
         return donations[requester][rounds.length - 1][donationId];
     }
 
-    function getRequestToDonationRatio(address requester) public view returns (uint) {
-        return requestToDonationRatios[requester].numberRequests / requestToDonationRatios[requester].numberDonations;
+    function getRequestToDonationRatio(address requester) public view returns (uint numberRequests, uint numberDonations) {
+        return (requestToDonationRatios[requester].numberRequests, requestToDonationRatios[requester].numberDonations);
     }
 
     function getRewardsBalance (address requester) public view returns (uint) {
