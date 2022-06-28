@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.14;
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
@@ -308,7 +309,7 @@ contract CommunityCare {
             rounds[currentRoundNumber].totalDonationstoCommonPool++;
             commonPoolBalanceInWei += msg.value;
         }
-        
+
         requestToDonationRatios[msg.sender].numberDonations += 1e18;
         EnumerableSet.contains(donators, msg.sender) ? false : donators.add(msg.sender);
         rounds[currentRoundNumber].totalFundsInWei += msg.value;
