@@ -343,8 +343,4 @@ contract CommunityCare {
         currentRound.currentPhase = Phases(uint(currentRound.currentPhase) + 1);
         emit PhaseStarted(rounds.length - 1, currentRound.currentPhase);
     }
-
-    function _cleanUp() internal {
-
-    }
 }
