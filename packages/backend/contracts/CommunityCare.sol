@@ -267,8 +267,8 @@ contract CommunityCare is Ownable {
         require(rounds[rounds.length - 1].totalDonationsToCommonPool > 0, "No funding to allocate");
         for (uint i = 0; i < _requestorsArray.length; i++) {
             address requester = _requestorsArray[i];
-            Round memory round = rounds[_currentRoundNumber];
-            for(uint j = 0; j < requests[requester][_currentRoundNumber].length; j++) {
+            Request[] memory requests = requests[requester][_currentRoundNumber];
+            for(uint j = 0; j < requests.length; j++) {
                 Request storage request = requests[requester][_currentRoundNumber][j];
                 uint256 totalDonationsToRequest = request.numberOfDonations;
                 uint256 totalDonationsInRound = round.totalDonationsToRequests + round.totalDonationsToCommonPool;
