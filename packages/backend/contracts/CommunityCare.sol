@@ -280,7 +280,6 @@ contract CommunityCare {
     }
 
     function _donate(address _donator, uint _donationAmount, string memory _requestId) internal {
-        
         uint currentRoundNumber = rounds.length - 1;
         uint donationTime = block.timestamp;
 
@@ -322,8 +321,14 @@ contract CommunityCare {
     function _calculateTokenRewards(address donator, uint donationAmount) internal view returns (uint tokenRewards) {
         uint totalRewards;
         RTDRatio memory rtdRatio = requestToDonationRatios[donator];
+
+        //Catch divide by zero error
+        if (rtdRatio.numberDonations == 0) {
+            return 0;
+        }
+
         uint ratioUint = rtdRatio.numberRequests / rtdRatio.numberDonations;
-        ratioUint > 1e18 ? totalRewards = donationAmount * ratioUint * 50e18   : totalRewards = 0;
+        ratioUint > 1e18 ? donationAmount * ratioUint * 50e18 : 0;
         return totalRewards;
     }
 
