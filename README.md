@@ -3,7 +3,8 @@
 this smart contract is a prototype to build around our idea for a system to facilitate community giving and support, with an early algorithm for splitting up the common pool based on how many donations were assigned to which projects.
 
 ## how to read this repo
-navigate to packages/backend/contracts for the smart contract
+- navigate to packages/backend/contracts for the smart contract
+- frontend is a boilerplate for a future front-end (we are applying for a grant to continue work)
 
 # create-web3 boilerplate [![Version](https://img.shields.io/npm/v/create-web3)](https://www.npmjs.com/package/create-web3) [![Downloads](https://img.shields.io/npm/dm/create-web3)](https://www.npmjs.com/package/create-web3)
 
