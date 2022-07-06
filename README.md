@@ -1,3 +1,8 @@
+# community-care
+
+this smart contract is a prototype to build around our idea for a system to facilitate community giving and support, with an early algorithm for splitting up the common pool based on how many donations were assigned to which projects.
+
+
 # create-web3 boilerplate [![Version](https://img.shields.io/npm/v/create-web3)](https://www.npmjs.com/package/create-web3) [![Downloads](https://img.shields.io/npm/dm/create-web3)](https://www.npmjs.com/package/create-web3)
 
 A boilerplate for starting a web3 project.
