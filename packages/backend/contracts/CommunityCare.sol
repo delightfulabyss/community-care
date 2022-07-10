@@ -7,7 +7,7 @@ import "./ERC20.sol";
 
 contract CommunityCare is Ownable {
 
-    /***************************************************************************
+  /***************************************************************************
      ************************** State Variables ********************************
      ***************************************************************************/
 
@@ -137,7 +137,7 @@ contract CommunityCare is Ownable {
             _title,
             _description,
             _requestAmountInWei,
-            _supportingDocumentation,
+            _supportingDocumentation 
             0,
             0,
             false
@@ -214,7 +214,7 @@ contract CommunityCare is Ownable {
       * @dev This function calls the internal _allocateCommonPool function.
       */
     function allocateCommonPool() public onlyPhase(Phases.Allocation) onlyOwner {
-        _checktime();
+        _checkTime();
         address[] memory requestorsArray = EnumerableSet.values(requestors);
         uint currentRoundNumber = rounds.length - 1;
         _allocateCommonPool(requestorsArray, currentRoundNumber);
