@@ -137,7 +137,7 @@ contract CommunityCare is Ownable {
             _title,
             _description,
             _requestAmountInWei,
-            _supportingDocumentation 
+            _supportingDocumentation, 
             0,
             0,
             false
