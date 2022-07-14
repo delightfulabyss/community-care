@@ -10,9 +10,9 @@ contract CommunityCare is Ownable {
   /***************************************************************************
      ************************** State Variables ********************************
      ***************************************************************************/
-
-    using EnumerableSet for EnumerableSet.AddressSet;
     
+          using EnumerableSet for EnumerableSet.AddressSet;
+   
     // The request period duration.
     uint256 public requestPhaseDuration;
 
