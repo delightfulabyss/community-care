@@ -1,8 +1,6 @@
-<<<<<<< HEAD
 # [community-care](https://github.com/filecoin-project/devgrants/issues/719)
-=======
+
 # Project Description 
->>>>>>> d31ff1f (Update readme)
 
 This project is a prototype of a system to facilitate community giving and support. It contains two early-stage algorithms: one for splitting up a common pool of funds based on how many donations were previously given to each request and one for generating token rewards based on a donation-to-request ratio.
 
