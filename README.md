@@ -1,4 +1,4 @@
-# community-care
+# [community-care](https://github.com/filecoin-project/devgrants/issues/719)
 
 this smart contract is a prototype to build around our idea for a system to facilitate community giving and support, with an early algorithm for splitting up the common pool based on how many donations were assigned to which projects.
 
