@@ -2,6 +2,7 @@
 
 - What is your relationship to technology/the internet?
     - For paying and receiving money, what technologies do you use?
+            -    What is the experience of using that like?
     - Have them self report on a scale 0-10, what is your level of technical competency 
 - Describe the last time you asked someone for help
 - Describe the last time you asked someone for financial help
